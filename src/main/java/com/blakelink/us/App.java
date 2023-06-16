@@ -1,24 +1,27 @@
 package com.blakelink.us;
-
 import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.net.URL;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
 public class App {
 
     private static final String DB_URL = "jdbc:sqlite:database.db";
-    private static final String VIEW_NAME = "UsefulView";
     private static final int PAGE_SIZE = 50;
     private static int currentPage = 0;
-
-    private static boolean isViewModified = false;
-    private static String originalViewCode = "";
+    private static List<String> existingViews = new ArrayList<>();
 
     public static void main(String[] args) {
         EventQueue.invokeLater(() -> {
@@ -47,8 +50,21 @@ public class App {
         tabbedPane.addTab("Original Table", originalTabPanel);
 
         // Create modify view tab
-        JTextArea viewTextArea = new JTextArea();
-        JScrollPane viewScrollPane = new JScrollPane(viewTextArea);
+        JList<String> viewList = new JList<>();
+        viewList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    JList<String> list = (JList) evt.getSource();
+                    int index = list.locationToIndex(evt.getPoint());
+                    if (index >= 0) {
+                        String selectedView = list.getModel().getElementAt(index);
+                        displayView(selectedView, originalTableModel);
+                    }
+                }
+            }
+        });
+        JScrollPane viewScrollPane = new JScrollPane(viewList);
         JPanel modifyViewTabPanel = new JPanel(new BorderLayout());
         modifyViewTabPanel.add(viewScrollPane, BorderLayout.CENTER);
         tabbedPane.addTab("Modify View", modifyViewTabPanel);
@@ -79,72 +95,46 @@ public class App {
         frame.setSize(800, 600);
         frame.setVisible(true);
 
-        // Fill the original table
-        fillTable(originalTableModel, currentPage * PAGE_SIZE);
+        // Fetch the existing views from the database
+        fetchExistingViews();
 
-        // Fetch and display the current SQL view in the modify view tab
-        fetchView(viewTextArea);
+        // Populate the view list in the modify view tab
+        DefaultListModel<String> viewListModel = new DefaultListModel<>();
+        for (String view : existingViews) {
+            viewListModel.addElement(view);
+        }
+        viewList.setModel(viewListModel);
 
-        // Add document listener to the view text area to track modifications
-        viewTextArea.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                isViewModified = true;
-                updateIcon();
+        // Fill the original table with the first view
+        if (!existingViews.isEmpty()) {
+            displayView(existingViews.get(0), originalTableModel);
+        }
+    }
+
+    private static void fetchExistingViews() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type = 'view'")) {
+
+            while (rs.next()) {
+                String viewName = rs.getString("name");
+                existingViews.add(viewName);
             }
 
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                isViewModified = true;
-                updateIcon();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                isViewModified = true;
-                updateIcon();
-            }
-        });
-
-        // Save button to update the view and refresh the original table
-        JButton saveButton = new JButton("Save");
-        saveButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (isViewModified) {
-                    saveView(viewTextArea.getText());
-                    isViewModified = false;
-                    updateIcon();
-                    refreshOriginalTable(originalTableModel);
-                }
-            }
-        });
-
-        // Undo button to revert the view to its original state
-        JButton undoButton = new JButton("Undo");
-        undoButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                if (isViewModified) {
-                    viewTextArea.setText(originalViewCode);
-                    isViewModified = false;
-                    updateIcon();
-                    refreshOriginalTable(originalTableModel);
-                }
-            }
-        });
-
-        // Panel to hold the save and undo buttons
-        JPanel modifyViewButtonPanel = new JPanel();
-        modifyViewButtonPanel.add(saveButton);
-        modifyViewButtonPanel.add(undoButton);
-        modifyViewTabPanel.add(modifyViewButtonPanel, BorderLayout.NORTH);
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
     }
 
     private static void fillTable(DefaultTableModel tableModel, int offset) {
+        if (existingViews.isEmpty()) {
+            return;
+        }
+
+        String selectedView = existingViews.get(0); // Use the first view by default
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM " + VIEW_NAME + " LIMIT " + PAGE_SIZE + " OFFSET " + offset)) {
+             ResultSet rs = stmt.executeQuery("SELECT * FROM " + selectedView + " LIMIT " + PAGE_SIZE + " OFFSET " + offset)) {
 
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
@@ -172,62 +162,8 @@ public class App {
         }
     }
 
-    private static void fetchView(JTextArea viewTextArea) {
-        try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT sql FROM sqlite_master WHERE type = 'view' AND name = '" + VIEW_NAME + "'")) {
-
-            if (rs.next()) {
-                String sql = rs.getString("sql");
-                viewTextArea.setText(sql);
-                originalViewCode = sql;
-            }
-
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-        }
-    }
-
-    private static void saveView(String newViewCode) {
-    try (Connection conn = DriverManager.getConnection(DB_URL);
-            Statement stmt = conn.createStatement()) {
-        // Validate the syntax of the new view code
-        try {
-            stmt.executeUpdate("CREATE VIEW " + VIEW_NAME + " AS " + newViewCode);
-        } catch (SQLException ex) {
-            System.out.println("Syntax error in CREATE VIEW code. View not saved.");
-            ex.printStackTrace();
-            return; // Return without saving the view
-        }
-
-        // Drop the existing view
-        stmt.executeUpdate("DROP VIEW IF EXISTS " + VIEW_NAME);
-
-        // Create the updated view
-        stmt.executeUpdate("CREATE VIEW " + VIEW_NAME + " AS " + newViewCode);
-
-    } catch (SQLException ex) {
-        ex.printStackTrace();
-    }
-}
-
-
-    private static void refreshOriginalTable(DefaultTableModel tableModel) {
+    private static void displayView(String viewName, DefaultTableModel tableModel) {
         currentPage = 0;
         fillTable(tableModel, currentPage * PAGE_SIZE);
-    }
-
-    private static void updateIcon() {
-        try {
-            URL iconURL = App.class.getResource("yellow_icon.png");
-            if (iconURL != null) {
-                ImageIcon icon = new ImageIcon(iconURL);
-                // Use the icon variable as needed
-            } else {
-                // Handle the case when the iconURL is null
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 }
