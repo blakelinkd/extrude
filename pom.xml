@@ -29,24 +29,32 @@
   </dependencies>
   <build>
     <plugins>
-      <plugin>
+    <!-- Other plugins -->
+    <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.8.0</version>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>3.3.0</version>
         <configuration>
-          <source>11</source>
-          <target>11</target>
+            <archive>
+                <manifest>
+                    <mainClass>com.blakelink.us.App</mainClass>
+                </manifest>
+            </archive>
+            <descriptorRefs>
+                <descriptorRef>jar-with-dependencies</descriptorRef>
+            </descriptorRefs>
         </configuration>
-      </plugin>
+        <executions>
+            <execution>
+                <id>create-executable-jar</id>
+                <phase>package</phase>
+                <goals>
+                    <goal>single</goal>
+                </goals>
+            </execution>
+        </executions>
+    </plugin>
+</plugins>
 
-      <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <version>3.0.0</version>
-            <configuration>
-                <mainClass>com.blakelink.us.App</mainClass>
-            </configuration>
-        </plugin>
-    </plugins>
   </build>
 </project>

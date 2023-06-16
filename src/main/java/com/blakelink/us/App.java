@@ -36,7 +36,7 @@ public class App {
     }
 
     private static void createAndShowGUI() {
-        JFrame frame = new JFrame("SQLite View Display");
+        JFrame frame = new JFrame("SQL Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         JTabbedPane tabbedPane = new JTabbedPane();
