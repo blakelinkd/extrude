@@ -36,6 +36,8 @@ buildNumber.properties
 # avoid ignoring Maven wrapper jar file (.jar files are usually ignored)
 !/.mvn/wrapper/maven-wrapper.jar
 
+sql/
+
 # IDE - Eclipse
 *.pydevproject
 .project
@@ -63,3 +65,4 @@ nbbuild/
 dist/
 nbdist/
 .nb-gradle/
+.vscode
