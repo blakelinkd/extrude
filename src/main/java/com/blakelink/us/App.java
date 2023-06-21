@@ -1,6 +1,9 @@
 package com.blakelink.us;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableModel;
+import javax.swing.table.TableRowSorter;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -59,7 +62,7 @@ public class App {
                     int index = list.locationToIndex(evt.getPoint());
                     if (index >= 0) {
                         String selectedView = list.getModel().getElementAt(index);
-                        displayView(selectedView, originalTableModel);
+                        displayView(selectedView, originalTableModel, originalTable);
                     }
                 }
             }
@@ -78,11 +81,14 @@ public class App {
         JButton prevButton = new JButton("Prev");
         nextButton.addActionListener(e -> {
             currentPage++;
-            fillTable(originalTableModel, currentPage * PAGE_SIZE);
+            fillTable(originalTableModel, originalTable, currentPage * PAGE_SIZE);
+
         });
         prevButton.addActionListener(e -> {
             currentPage--;
-            fillTable(originalTableModel, currentPage * PAGE_SIZE);
+            fillTable(originalTableModel, originalTable, currentPage * PAGE_SIZE);
+
+            
         });
 
         JPanel buttonPanel = new JPanel();
@@ -107,7 +113,7 @@ public class App {
 
         // Fill the original table with the first view
         if (!existingViews.isEmpty()) {
-            displayView(existingViews.get(0), originalTableModel);
+            displayView(existingViews.get(0), originalTableModel, originalTable);
         }
     }
 
@@ -126,28 +132,28 @@ public class App {
         }
     }
 
-    private static void fillTable(DefaultTableModel tableModel, int offset) {
+    private static void fillTable(DefaultTableModel tableModel, JTable table, int offset) {
         if (existingViews.isEmpty()) {
             return;
         }
-
+    
         String selectedView = existingViews.get(0); // Use the first view by default
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT * FROM " + selectedView + " LIMIT " + PAGE_SIZE + " OFFSET " + offset)) {
-
+    
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
-
+    
             // Clear existing data
             tableModel.setRowCount(0);
             tableModel.setColumnCount(0);
-
+    
             // Set column names
             for (int column = 1; column <= columnCount; column++) {
                 tableModel.addColumn(metaData.getColumnName(column));
             }
-
+    
             // Add data
             while (rs.next()) {
                 Object[] row = new Object[columnCount];
@@ -156,14 +162,18 @@ public class App {
                 }
                 tableModel.addRow(row);
             }
-
+    
+            TableRowSorter<TableModel> sorter = new TableRowSorter<>(tableModel);
+            table.setRowSorter(sorter);
+    
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
     }
+    
 
-    private static void displayView(String viewName, DefaultTableModel tableModel) {
+    private static void displayView(String viewName, DefaultTableModel tableModel, JTable table) {
         currentPage = 0;
-        fillTable(tableModel, currentPage * PAGE_SIZE);
+        fillTable(tableModel, table, currentPage * PAGE_SIZE);
     }
 }
