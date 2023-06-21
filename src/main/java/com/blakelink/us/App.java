@@ -27,6 +27,8 @@ public class App {
     private static int currentPage = 0;
     private static List<String> existingViews = new ArrayList<>();
     private static String currentView;
+    private static JTabbedPane tabbedPane;
+    private static JList<String> viewList;
 
     public static void main(String[] args) {
         EventQueue.invokeLater(() -> {
@@ -43,8 +45,10 @@ public class App {
     private static void createAndShowGUI() {
         JFrame frame = new JFrame("SQL Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        URL imageUrl = App.class.getResource("yellow_icon.png");
+        frame.setIconImage(new ImageIcon(imageUrl).getImage());
 
-        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane = new JTabbedPane();
 
         // Create original table tab
         DefaultTableModel originalTableModel = new DefaultTableModel();
@@ -55,7 +59,8 @@ public class App {
         tabbedPane.addTab("Original Table", originalTabPanel);
 
         // Create modify view tab
-        JList<String> viewList = new JList<>();
+        viewList = new JList<>();
+
         viewList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent evt) {
@@ -73,7 +78,7 @@ public class App {
         JScrollPane viewScrollPane = new JScrollPane(viewList);
         JPanel modifyViewTabPanel = new JPanel(new BorderLayout());
         modifyViewTabPanel.add(viewScrollPane, BorderLayout.CENTER);
-        tabbedPane.addTab("Modify View", modifyViewTabPanel);
+        tabbedPane.addTab("Select View", modifyViewTabPanel);
 
         // Styling and layout for the tabbed pane
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
@@ -179,7 +184,10 @@ public class App {
 
     private static void displayView(String viewName, DefaultTableModel tableModel, JTable table) {
         currentPage = 0;
-        currentView = viewName; // Set the current view to the viewName parameter
+        currentView = viewName;
+        tabbedPane.setTitleAt(0, currentView);
+        viewList.repaint(); // this line is accessible now
         fillTable(tableModel, table, currentPage * PAGE_SIZE);
     }
+
 }
