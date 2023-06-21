@@ -1,4 +1,5 @@
 package com.blakelink.us;
+
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableModel;
@@ -25,6 +26,7 @@ public class App {
     private static final int PAGE_SIZE = 50;
     private static int currentPage = 0;
     private static List<String> existingViews = new ArrayList<>();
+    private static String currentView;
 
     public static void main(String[] args) {
         EventQueue.invokeLater(() -> {
@@ -61,11 +63,12 @@ public class App {
                     JList<String> list = (JList) evt.getSource();
                     int index = list.locationToIndex(evt.getPoint());
                     if (index >= 0) {
-                        String selectedView = list.getModel().getElementAt(index);
-                        displayView(selectedView, originalTableModel, originalTable);
+                        currentView = list.getModel().getElementAt(index);
+                        displayView(currentView, originalTableModel, originalTable);
                     }
                 }
             }
+
         });
         JScrollPane viewScrollPane = new JScrollPane(viewList);
         JPanel modifyViewTabPanel = new JPanel(new BorderLayout());
@@ -88,7 +91,6 @@ public class App {
             currentPage--;
             fillTable(originalTableModel, originalTable, currentPage * PAGE_SIZE);
 
-            
         });
 
         JPanel buttonPanel = new JPanel();
@@ -119,8 +121,8 @@ public class App {
 
     private static void fetchExistingViews() {
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type = 'view'")) {
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type = 'view'")) {
 
             while (rs.next()) {
                 String viewName = rs.getString("name");
@@ -136,24 +138,28 @@ public class App {
         if (existingViews.isEmpty()) {
             return;
         }
-    
-        String selectedView = existingViews.get(0); // Use the first view by default
+        if (currentView == null || currentView.isEmpty()) {
+            return;
+        }
+
+        String selectedView = currentView;
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM " + selectedView + " LIMIT " + PAGE_SIZE + " OFFSET " + offset)) {
-    
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt
+                        .executeQuery("SELECT * FROM " + selectedView + " LIMIT " + PAGE_SIZE + " OFFSET " + offset)) {
+
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
-    
+
             // Clear existing data
             tableModel.setRowCount(0);
             tableModel.setColumnCount(0);
-    
+
             // Set column names
             for (int column = 1; column <= columnCount; column++) {
                 tableModel.addColumn(metaData.getColumnName(column));
             }
-    
+
             // Add data
             while (rs.next()) {
                 Object[] row = new Object[columnCount];
@@ -162,18 +168,18 @@ public class App {
                 }
                 tableModel.addRow(row);
             }
-    
+
             TableRowSorter<TableModel> sorter = new TableRowSorter<>(tableModel);
             table.setRowSorter(sorter);
-    
+
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
     }
-    
 
     private static void displayView(String viewName, DefaultTableModel tableModel, JTable table) {
         currentPage = 0;
+        currentView = viewName; // Set the current view to the viewName parameter
         fillTable(tableModel, table, currentPage * PAGE_SIZE);
     }
 }
