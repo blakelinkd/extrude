@@ -1,24 +1,19 @@
 package com.blakelink.us;
-
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
-
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.net.URL;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rtextarea.RTextScrollPane;
 
 public class App {
 
@@ -45,12 +40,17 @@ public class App {
     private static void createAndShowGUI() {
         JFrame frame = new JFrame("SQL Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        URL imageUrl = App.class.getResource("yellow_icon.png");
-        frame.setIconImage(new ImageIcon(imageUrl).getImage());
+
+        URL url = App.class.getResource("/yellow_icon.png");
+        if (url != null) {
+            ImageIcon img = new ImageIcon(url);
+            frame.setIconImage(img.getImage());
+        } else {
+            System.err.println("Could not find icon file.");
+        }
 
         tabbedPane = new JTabbedPane();
 
-        // Create original table tab
         DefaultTableModel originalTableModel = new DefaultTableModel();
         JTable originalTable = new JTable(originalTableModel);
         JScrollPane originalScrollPane = new JScrollPane(originalTable);
@@ -58,9 +58,7 @@ public class App {
         originalTabPanel.add(originalScrollPane, BorderLayout.CENTER);
         tabbedPane.addTab("Original Table", originalTabPanel);
 
-        // Create modify view tab
         viewList = new JList<>();
-
         viewList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent evt) {
@@ -80,11 +78,9 @@ public class App {
         modifyViewTabPanel.add(viewScrollPane, BorderLayout.CENTER);
         tabbedPane.addTab("Select View", modifyViewTabPanel);
 
-        // Styling and layout for the tabbed pane
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         tabbedPane.setFont(new Font("SansSerif", Font.PLAIN, 16));
 
-        // Pagination for the original table
         JButton nextButton = new JButton("Next");
         JButton prevButton = new JButton("Prev");
         nextButton.addActionListener(e -> {
@@ -103,25 +99,24 @@ public class App {
         buttonPanel.add(nextButton);
         originalTabPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        // Add tabbed pane to the frame
         frame.getContentPane().add(tabbedPane, BorderLayout.CENTER);
         frame.setSize(800, 600);
         frame.setVisible(true);
 
-        // Fetch the existing views from the database
         fetchExistingViews();
+        populateViewList();
 
-        // Populate the view list in the modify view tab
-        DefaultListModel<String> viewListModel = new DefaultListModel<>();
-        for (String view : existingViews) {
-            viewListModel.addElement(view);
-        }
-        viewList.setModel(viewListModel);
-
-        // Fill the original table with the first view
         if (!existingViews.isEmpty()) {
             displayView(existingViews.get(0), originalTableModel, originalTable);
         }
+        
+        // Add a new button to open a new window with the database schema
+       JButton schemaButton = new JButton("View Schema");
+schemaButton.addActionListener(e -> showSchema());
+JPanel buttonPanel2 = new JPanel(new FlowLayout(FlowLayout.LEFT));
+buttonPanel2.add(schemaButton);
+frame.getContentPane().add(buttonPanel2, BorderLayout.NORTH);
+
     }
 
     private static void fetchExistingViews() {
@@ -137,6 +132,14 @@ public class App {
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
+    }
+
+    private static void populateViewList() {
+        DefaultListModel<String> viewListModel = new DefaultListModel<>();
+        for (String view : existingViews) {
+            viewListModel.addElement(view);
+        }
+        viewList.setModel(viewListModel);
     }
 
     private static void fillTable(DefaultTableModel tableModel, JTable table, int offset) {
@@ -156,16 +159,13 @@ public class App {
             ResultSetMetaData metaData = rs.getMetaData();
             int columnCount = metaData.getColumnCount();
 
-            // Clear existing data
             tableModel.setRowCount(0);
             tableModel.setColumnCount(0);
 
-            // Set column names
             for (int column = 1; column <= columnCount; column++) {
                 tableModel.addColumn(metaData.getColumnName(column));
             }
 
-            // Add data
             while (rs.next()) {
                 Object[] row = new Object[columnCount];
                 for (int i = 0; i < columnCount; i++) {
@@ -186,8 +186,49 @@ public class App {
         currentPage = 0;
         currentView = viewName;
         tabbedPane.setTitleAt(0, currentView);
-        viewList.repaint(); // this line is accessible now
         fillTable(tableModel, table, currentPage * PAGE_SIZE);
     }
 
+    private static void showSchema() {
+        try (Connection conn = DriverManager.getConnection(DB_URL);
+                ResultSet tables = conn.getMetaData().getTables(null, null, null, null)) {
+
+            RSyntaxTextArea textArea = new RSyntaxTextArea();
+            textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_SQL);
+            textArea.setEditable(false);
+            textArea.setCodeFoldingEnabled(true);
+
+            RTextScrollPane scrollPane = new RTextScrollPane(textArea);
+
+            JFrame schemaFrame = new JFrame("Database Schema");
+            schemaFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            schemaFrame.getContentPane().add(scrollPane);
+            schemaFrame.setSize(800, 600);
+            schemaFrame.setVisible(true);
+
+            StringBuilder schemaText = new StringBuilder();
+
+            while (tables.next()) {
+                String tableName = tables.getString("TABLE_NAME");
+                schemaText.append("Table: ").append(tableName).append("\n");
+
+                try (ResultSet columns = conn.getMetaData().getColumns(null, null, tableName, null)) {
+                    while (columns.next()) {
+                        String columnName = columns.getString("COLUMN_NAME");
+                        String columnType = columns.getString("TYPE_NAME");
+                        int columnSize = columns.getInt("COLUMN_SIZE");
+                        schemaText.append("  - ").append(columnName).append(" (").append(columnType).append(")").append(" [")
+                                .append(columnSize).append("]").append("\n");
+                    }
+                }
+
+                schemaText.append("\n");
+            }
+
+            textArea.setText(schemaText.toString());
+
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+    }
 }
